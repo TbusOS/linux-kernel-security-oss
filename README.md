@@ -1,5 +1,8 @@
 # linux-kernel-security-oss · 内核安全检测工具库
 
+> 📖 **文档站(anthropic 风格,双语):https://doc.tbusos.com/linux-kernel-security-oss/**
+> [设计目的与总览](https://doc.tbusos.com/linux-kernel-security-oss/) · [使用指南](https://doc.tbusos.com/linux-kernel-security-oss/usage.html) · [设计与架构](https://doc.tbusos.com/linux-kernel-security-oss/architecture.html)
+
 给 Linux 内核(尤其 **vendor / Android arm64 内核**)做**安全漏洞检测 + 配置加固 + 代码审计**的一套开源工具编排。目标:**clone 下来就知道怎么测、要哪些工具、怎么一键装依赖**。
 
 - 面向:做内核移植 / vendor SDK 维护 / 嵌入式安全的工程师。
