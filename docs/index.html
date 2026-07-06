@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="zh" data-lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>linux-kernel-security-oss — 内核安全检测工具库</title>
+<meta name="description" content="给 Linux vendor / Android arm64 内核做安全漏洞检测、配置加固、代码审计的开源工具编排：六类方法、三层检测、一键装依赖。A curated, one-command toolkit for defensive Linux kernel security detection.">
+<meta property="og:title" content="linux-kernel-security-oss — 内核安全检测工具库">
+<meta property="og:description" content="Six categories, three layers, one command to install every dependency — a curated toolkit for defensive Linux kernel security detection. 六类方法、三层检测、一键装依赖。">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="assets/fonts.css">
+<link rel="stylesheet" href="assets/anthropic.css">
+<style>
+  html[data-lang="en"] .lang-zh { display: none !important; }
+  html[data-lang="zh"] .lang-en { display: none !important; }
+  html[data-lang="zh"] body, html[data-lang="zh"] p, html[data-lang="zh"] li, html[data-lang="zh"] td, html[data-lang="zh"] .cat-card__desc {
+    font-family: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", sans-serif;
+  }
+  html[data-lang="zh"] h1, html[data-lang="zh"] h2, html[data-lang="zh"] h3, html[data-lang="zh"] .cat-card__name, html[data-lang="zh"] .anth-badge {
+    font-family: "Noto Sans SC", "PingFang SC", sans-serif;
+  }
+  .lang-toggle {
+    background: transparent; border: 1px solid var(--anth-light-gray); color: var(--anth-text);
+    font-family: var(--font-heading); font-size: 13px; font-weight: 500; padding: 6px 12px;
+    border-radius: var(--radius-pill); cursor: pointer; letter-spacing: 0.05em;
+  }
+  .lang-toggle:hover { background: var(--anth-light-gray); }
+
+  /* Category grid */
+  .cat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5); }
+  .cat-card {
+    background: #ffffff; border: 1px solid var(--anth-light-gray); border-radius: var(--radius-md);
+    padding: var(--space-6); display: flex; flex-direction: column;
+  }
+  .cat-card__num {
+    font-family: var(--font-heading); font-size: 11.5px; letter-spacing: 0.14em;
+    font-weight: 700; text-transform: uppercase;
+  }
+  .cat-card__name {
+    font-family: var(--font-heading); font-size: 20px; font-weight: 600; letter-spacing: -0.01em;
+    color: var(--anth-text); margin: var(--space-2) 0;
+  }
+  .cat-card__desc {
+    font-family: var(--font-body); font-size: 15px; line-height: 1.6; color: var(--anth-text);
+    margin: 0 0 var(--space-4); flex: 1;
+  }
+  .cat-card__tag { font-family: var(--font-heading); font-size: 12px; color: var(--anth-text-secondary); }
+
+  /* Quick-start */
+  .quickstart {
+    background: #faf9f5; border: 1px solid var(--anth-light-gray); border-radius: var(--radius-md);
+    padding: var(--space-7); display: grid; grid-template-columns: 1fr 1.25fr; gap: var(--space-7); align-items: center;
+  }
+  .quickstart pre {
+    background: #141413; color: #faf9f5; padding: var(--space-5); border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.65; overflow-x: auto; margin: 0;
+  }
+  .quickstart pre .cmd { color: #d97757; }
+  .quickstart pre .str { color: #a9c890; }
+  .quickstart pre .com { color: #8c8a7d; font-style: italic; }
+
+  .deep-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5); }
+  .deep-card {
+    background: #ffffff; border: 1px solid var(--anth-light-gray); border-radius: var(--radius-md);
+    padding: var(--space-6); text-decoration: none; color: var(--anth-text); transition: border-color .2s ease;
+    display: flex; flex-direction: column; gap: var(--space-2);
+  }
+  .deep-card:hover { border-color: var(--anth-orange); }
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-5); }
+  @media (max-width: 768px) {
+    .cat-grid, .deep-row { grid-template-columns: 1fr; }
+    .stat-row { grid-template-columns: repeat(2, 1fr); }
+    .quickstart { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="anth-nav"><div class="anth-nav-inner">
+  <a href="index.html" style="font-family:var(--font-heading); font-weight:600; font-size:17px; text-decoration:none; color:var(--anth-text);">linux-kernel-security-oss</a>
+  <div>
+    <a href="usage.html"><span class="lang-en">Usage</span><span class="lang-zh">使用</span></a>
+    <a href="architecture.html"><span class="lang-en">Architecture</span><span class="lang-zh">架构</span></a>
+    <a href="index.html#categories"><span class="lang-en">Features</span><span class="lang-zh">功能</span></a>
+  </div>
+  <div style="display:flex; gap:var(--space-3); align-items:center;">
+    <button type="button" class="lang-toggle" aria-label="Switch language">EN / 中</button>
+    <a class="anth-button" href="https://github.com/TbusOS/linux-kernel-security-oss" target="_blank" rel="noopener">GitHub</a>
+  </div>
+</div></nav>
+
+<!-- Hero -->
+<section class="anth-hero">
+  <div class="anth-container anth-container--wide" style="text-align:center;">
+    <span class="anth-badge"><span class="lang-en">Defensive kernel security · open-source toolkit</span><span class="lang-zh">内核安全检测 · 开源工具库</span></span>
+    <h1 style="margin-top:var(--space-4); font-size:60px; line-height:1.1; max-width:880px; margin-left:auto; margin-right:auto;">
+      <span class="lang-en">Test your kernel<br>before someone else does.</span>
+      <span class="lang-zh">在别人动手之前<br>先测你自己的内核。</span>
+    </h1>
+    <p style="font-size:19px; color:var(--anth-text-secondary); margin:var(--space-5) auto var(--space-6); line-height:1.65; font-family:var(--font-body); max-width:700px;">
+      <span class="lang-en">A curated toolkit for detecting known CVEs, hardening config, and auditing code in Linux vendor / Android arm64 kernels. Six categories, three layers, one command to install every dependency. Clone it and you know exactly how to test — no guesswork.</span>
+      <span class="lang-zh">给 Linux vendor / Android arm64 内核做已知 CVE 检测、配置加固、代码审计的一套开源工具编排。六类方法、三层检测、一条命令装齐依赖。拉下来就知道怎么测——不用猜。</span>
+    </p>
+    <div style="display:flex; gap:var(--space-3); justify-content:center; flex-wrap:wrap;">
+      <a class="anth-button" href="#quickstart"><span class="lang-en">Quick start</span><span class="lang-zh">快速上手</span></a>
+      <a class="anth-button anth-button--ghost" href="architecture.html"><span class="lang-en">How it's built</span><span class="lang-zh">看设计架构</span></a>
+    </div>
+  </div>
+</section>
+
+<!-- Design purpose / stats -->
+<section class="anth-section anth-section--subtle">
+  <div class="anth-container anth-container--wide">
+    <div style="max-width:720px; margin:0 auto var(--space-8); text-align:center;">
+      <span class="anth-badge"><span class="lang-en">Why this exists</span><span class="lang-zh">为什么做这个</span></span>
+      <h2 style="margin-top:var(--space-3);">
+        <span class="lang-en">"Detecting kernel vulnerabilities" is not one thing.</span>
+        <span class="lang-zh">"检测内核漏洞"其实不是一件事。</span>
+      </h2>
+      <p style="color:var(--anth-text-secondary); font-size:17px; margin-top:var(--space-3); font-family:var(--font-body);">
+        <span class="lang-en">It's several — with completely different tools. Mixing "scan for a known CVE" with "rate a bug's impact" is the number-one reason people pick the wrong tool. This repo splits the work into six clear categories and hands you the right tool for each, pre-wired.</span>
+        <span class="lang-zh">它是好几件事，手段完全不同。把"扫已知 CVE"和"给漏洞定影响级别"混为一谈，是选错工具的头号原因。本库把它拆成六个清楚的类别，每类配好对应工具，直接可用。</span>
+      </p>
+    </div>
+    <div class="stat-row">
+      <div class="anth-stat"><div class="anth-stat-number">6</div><div class="anth-stat-label"><span class="lang-en">tool categories</span><span class="lang-zh">工具类别</span></div></div>
+      <div class="anth-stat"><div class="anth-stat-number">10</div><div class="anth-stat-label"><span class="lang-en">open-source tools wired in</span><span class="lang-zh">编排好的开源工具</span></div></div>
+      <div class="anth-stat"><div class="anth-stat-number">3</div><div class="anth-stat-label"><span class="lang-en">detection layers</span><span class="lang-zh">检测层</span></div></div>
+      <div class="anth-stat"><div class="anth-stat-number">1</div><div class="anth-stat-label"><span class="lang-en">command to install deps</span><span class="lang-zh">命令装齐依赖</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- Six categories -->
+<section class="anth-section" id="categories">
+  <div class="anth-container anth-container--wide">
+    <div style="max-width:720px; margin:0 auto var(--space-8); text-align:center;">
+      <span class="anth-badge"><span class="lang-en">The six categories</span><span class="lang-zh">六个类别</span></span>
+      <h2 style="margin-top:var(--space-3);">
+        <span class="lang-en">Pick the category, get the tool.</span>
+        <span class="lang-zh">选对类别，拿对工具。</span>
+      </h2>
+      <p style="color:var(--anth-text-secondary); font-size:17px; margin-top:var(--space-3); font-family:var(--font-body);">
+        <span class="lang-en">①②③⑤⑥ are what this repo practices — all on kernels you own or are authorized to test, to find and fix. ④ is reference-only: paper impact-rating to prioritize fixes, no attack tooling.</span>
+        <span class="lang-zh">①②③⑤⑥ 是本库实践的——全部对你拥有或获授权的内核做，目的是找出来并修掉。④ 是参考类：纸面影响评级给修复排优先级，不含攻击工具。</span>
+      </p>
+    </div>
+
+    <div class="cat-grid">
+      <article class="cat-card">
+        <span class="cat-card__num" style="color:var(--anth-blue);">01 · CVE</span>
+        <h3 class="cat-card__name"><span class="lang-en">Known CVE detection</span><span class="lang-zh">已知 CVE 检测</span></h3>
+        <p class="cat-card__desc"><span class="lang-en">Does my kernel carry a published CVE that's unpatched? Static source / git checks — cvehound + kernel-cve-tool.</span><span class="lang-zh">内核里有没有已公开、还没修的 CVE？静态查源码 / git —— cvehound + kernel-cve-tool。</span></p>
+        <span class="cat-card__tag"><span class="lang-en">deterministic tools</span><span class="lang-zh">确定性工具主场</span></span>
+      </article>
+      <article class="cat-card">
+        <span class="cat-card__num" style="color:var(--anth-green);">02 · HARDEN</span>
+        <h3 class="cat-card__name"><span class="lang-en">Config hardening</span><span class="lang-zh">配置加固检查</span></h3>
+        <p class="cat-card__desc"><span class="lang-en">Is my kernel config hard enough? Compare .config / cmdline / sysctl against the KSPP baseline — kernel-hardening-checker.</span><span class="lang-zh">内核配置够不够硬？拿 .config / cmdline / sysctl 对照 KSPP 加固基线 —— kernel-hardening-checker。</span></p>
+        <span class="cat-card__tag"><span class="lang-en">rule comparison</span><span class="lang-zh">规则比对</span></span>
+      </article>
+      <article class="cat-card">
+        <span class="cat-card__num" style="color:var(--anth-orange);">03 · DISCOVER</span>
+        <h3 class="cat-card__name"><span class="lang-en">New-bug discovery</span><span class="lang-zh">新漏洞挖掘</span></h3>
+        <p class="cat-card__desc"><span class="lang-en">Any bug nobody has found yet? LLM synthesizes syscall specs, syzkaller does the fuzzing — KernelGPT.</span><span class="lang-zh">有没有还没人发现的洞？LLM 合成 syscall 规格，syzkaller 实跑 fuzz —— KernelGPT。</span></p>
+        <span class="cat-card__tag"><span class="lang-en">LLM + fuzzer</span><span class="lang-zh">LLM 配 fuzzer</span></span>
+      </article>
+      <article class="cat-card">
+        <span class="cat-card__num" style="color:var(--anth-text-secondary);">04 · RATE</span>
+        <h3 class="cat-card__name"><span class="lang-en">Impact rating <span style="font-weight:400;font-size:13px;">(reference)</span></span><span class="lang-zh">影响评级 <span style="font-weight:400;font-size:13px;">（参考类）</span></span></h3>
+        <p class="cat-card__desc"><span class="lang-en">How bad is a found bug, fix it first or not? Paper rating from vulnerability-class knowledge. No attack tooling.</span><span class="lang-zh">查到的洞影响多大、要不要先修？靠漏洞类别知识做纸面评级。不放攻击工具。</span></p>
+        <span class="cat-card__tag"><span class="lang-en">human judgement</span><span class="lang-zh">人工判断</span></span>
+      </article>
+      <article class="cat-card">
+        <span class="cat-card__num" style="color:var(--anth-orange);">05 · AUDIT</span>
+        <h3 class="cat-card__name"><span class="lang-en">LLM code / patch audit</span><span class="lang-zh">LLM 审代码 / 补丁</span></h3>
+        <p class="cat-card__desc"><span class="lang-en">Does this diff have a security issue? Claude reads C semantically — filters ① false positives, reviews backports.</span><span class="lang-zh">这段 diff 有没有安全问题？Claude 语义读 C —— 过滤 ① 假阳性、审 backport。</span></p>
+        <span class="cat-card__tag"><span class="lang-en">assists ①③</span><span class="lang-zh">辅助 ①③</span></span>
+      </article>
+      <article class="cat-card">
+        <span class="cat-card__num" style="color:var(--anth-blue);">06 · REVERSE</span>
+        <h3 class="cat-card__name"><span class="lang-en">Binary reverse-engineering</span><span class="lang-zh">二进制逆向</span></h3>
+        <p class="cat-card__desc"><span class="lang-en">Only have a .ko / firmware, or must prove the shipped binary carries a bug? Ghidra / radare2 wired to Claude via MCP.</span><span class="lang-zh">只有 .ko / 固件，或要证明出厂二进制含 bug?Ghidra / radare2 经 MCP 接给 Claude。</span></p>
+        <span class="cat-card__tag"><span class="lang-en">assembly-level proof</span><span class="lang-zh">汇编级坐实</span></span>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- Three-layer architecture diagram -->
+<section class="anth-section anth-section--subtle">
+  <div class="anth-container anth-container--wide">
+    <div style="max-width:720px; margin:0 auto var(--space-7); text-align:center;">
+      <span class="anth-badge"><span class="lang-en">How it runs</span><span class="lang-zh">怎么跑</span></span>
+      <h2 style="margin-top:var(--space-3);">
+        <span class="lang-en">Three layers, deepest last.</span>
+        <span class="lang-zh">三层检测，由浅入深。</span>
+      </h2>
+      <p style="color:var(--anth-text-secondary); font-size:17px; margin-top:var(--space-3); font-family:var(--font-body);">
+        <span class="lang-en">Each layer runs independently and folds into one report. L1 is deterministic fact; L2 is an LLM hint you verify; L3 is measured behaviour on your own device.</span>
+        <span class="lang-zh">三层各自独立可跑，并进一份报告。L1 是确定性事实；L2 是要你验证的 LLM 提示；L3 是自家设备上的实测行为。</span>
+      </p>
+    </div>
+
+    <figure style="margin:0;">
+      <svg viewBox="0 0 1180 560" role="img" width="100%" style="height:auto; border:1px solid var(--anth-light-gray); border-radius:16px; background:#ffffff;"
+           aria-label="Three-layer detection pipeline: L1 static deterministic (cvehound, kernel-cve-tool, hardening-checker), L2 LLM audit (c-review, variant-analysis), L3 dynamic on device (leak probe, slabmon, kmemleak) — all folding into one report via bin/ksec.">
+        <defs>
+          <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1" fill="#141413" opacity="0.05"/></pattern>
+          <marker id="arrO" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.5 L7.5,4 L0,7.5 Z" fill="#c2613f"/></marker>
+          <filter id="ndrop" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.06"/></filter>
+        </defs>
+        <rect x="0" y="0" width="1180" height="560" rx="16" fill="#faf9f5"/>
+        <rect x="0" y="0" width="1180" height="560" rx="16" fill="url(#dots)"/>
+
+        <!-- L1 lane -->
+        <rect x="32" y="40" width="740" height="132" rx="12" fill="#e2ecf5" stroke="#cdddec" stroke-width="1"/>
+        <rect x="32" y="40" width="4" height="132" rx="2" fill="#6a9bcc"/>
+        <circle cx="56" cy="66" r="4" fill="#6a9bcc"/>
+        <text x="68" y="70" font-family="Poppins,sans-serif" font-size="12" font-weight="700" letter-spacing="1.2" fill="#4a7bab">L1 · STATIC — DETERMINISTIC</text>
+        <text x="756" y="70" text-anchor="end" font-family="Lora,serif" font-size="11" font-style="italic" fill="#6b6a5f">no LLM · bin/ksec scan</text>
+        <!-- L1 node cards -->
+        <g filter="url(#ndrop)"><rect x="56" y="88" width="212" height="64" rx="9" fill="#ffffff" stroke="#d8d4c8"/></g>
+        <circle cx="72" cy="110" r="3.5" fill="#6a9bcc"/>
+        <text x="82" y="114" font-family="Poppins,sans-serif" font-size="13.5" font-weight="600" fill="#141413">cvehound</text>
+        <text x="72" y="134" font-family="Lora,serif" font-size="10.5" fill="#6b6a5f">source-pattern CVE match</text>
+        <g filter="url(#ndrop)"><rect x="288" y="88" width="212" height="64" rx="9" fill="#ffffff" stroke="#d8d4c8"/></g>
+        <circle cx="304" cy="110" r="3.5" fill="#6a9bcc"/>
+        <text x="314" y="114" font-family="Poppins,sans-serif" font-size="13.5" font-weight="600" fill="#141413">kernel-cve-tool</text>
+        <text x="304" y="134" font-family="Lora,serif" font-size="10.5" fill="#6b6a5f">git commit cross-check</text>
+        <g filter="url(#ndrop)"><rect x="520" y="88" width="228" height="64" rx="9" fill="#ffffff" stroke="#d8d4c8"/></g>
+        <circle cx="536" cy="110" r="3.5" fill="#788c5d"/>
+        <text x="546" y="114" font-family="Poppins,sans-serif" font-size="13.5" font-weight="600" fill="#141413">hardening-checker</text>
+        <text x="536" y="134" font-family="Lora,serif" font-size="10.5" fill="#6b6a5f">.config vs KSPP baseline</text>
+
+        <!-- L2 lane -->
+        <rect x="32" y="204" width="740" height="120" rx="12" fill="#f7e4dc" stroke="#eecdbf" stroke-width="1"/>
+        <rect x="32" y="204" width="4" height="120" rx="2" fill="#d97757"/>
+        <circle cx="56" cy="230" r="4" fill="#d97757"/>
+        <text x="68" y="234" font-family="Poppins,sans-serif" font-size="12" font-weight="700" letter-spacing="1.2" fill="#c2613f">L2 · LLM AUDIT — ASSIST</text>
+        <text x="756" y="234" text-anchor="end" font-family="Lora,serif" font-size="11" font-style="italic" fill="#6b6a5f">needs Claude Code · /kernel-sec-audit</text>
+        <g filter="url(#ndrop)"><rect x="56" y="252" width="212" height="56" rx="9" fill="#fbeee7" stroke="#e0a385" stroke-width="1.4"/></g>
+        <circle cx="72" cy="274" r="3.5" fill="#d97757"/>
+        <text x="82" y="278" font-family="Poppins,sans-serif" font-size="13.5" font-weight="600" fill="#141413">c-review</text>
+        <text x="72" y="297" font-family="Lora,serif" font-size="10.5" fill="#6b6a5f">semantic C audit of handlers</text>
+        <g filter="url(#ndrop)"><rect x="288" y="252" width="212" height="56" rx="9" fill="#fbeee7" stroke="#e0a385" stroke-width="1.4"/></g>
+        <circle cx="304" cy="274" r="3.5" fill="#d97757"/>
+        <text x="314" y="278" font-family="Poppins,sans-serif" font-size="13.5" font-weight="600" fill="#141413">variant-analysis</text>
+        <text x="304" y="297" font-family="Lora,serif" font-size="10.5" fill="#6b6a5f">find same-pattern bugs</text>
+        <g filter="url(#ndrop)"><rect x="520" y="252" width="228" height="56" rx="9" fill="#ffffff" stroke="#d8d4c8"/></g>
+        <circle cx="536" cy="274" r="3.5" fill="#d97757"/>
+        <text x="546" y="278" font-family="Poppins,sans-serif" font-size="13.5" font-weight="600" fill="#141413">security-review</text>
+        <text x="536" y="297" font-family="Lora,serif" font-size="10.5" fill="#6b6a5f">diff-aware patch review</text>
+
+        <!-- L3 lane -->
+        <rect x="32" y="356" width="740" height="120" rx="12" fill="#e5e9dd" stroke="#d3dbc5" stroke-width="1"/>
+        <rect x="32" y="356" width="4" height="120" rx="2" fill="#788c5d"/>
+        <circle cx="56" cy="382" r="4" fill="#788c5d"/>
+        <text x="68" y="386" font-family="Poppins,sans-serif" font-size="12" font-weight="700" letter-spacing="1.2" fill="#5d7045">L3 · DYNAMIC — ON YOUR DEVICE</text>
+        <text x="756" y="386" text-anchor="end" font-family="Lora,serif" font-size="11" font-style="italic" fill="#6b6a5f">authorized targets · ksec dynamic</text>
+        <g filter="url(#ndrop)"><rect x="56" y="404" width="212" height="56" rx="9" fill="#ffffff" stroke="#d8d4c8"/></g>
+        <circle cx="72" cy="426" r="3.5" fill="#788c5d"/>
+        <text x="82" y="430" font-family="Poppins,sans-serif" font-size="13.5" font-weight="600" fill="#141413">ioctl leak probe</text>
+        <text x="72" y="449" font-family="Lora,serif" font-size="10.5" fill="#6b6a5f">re-run an error path N times</text>
+        <g filter="url(#ndrop)"><rect x="288" y="404" width="212" height="56" rx="9" fill="#ffffff" stroke="#d8d4c8"/></g>
+        <circle cx="304" cy="426" r="3.5" fill="#788c5d"/>
+        <text x="314" y="430" font-family="Poppins,sans-serif" font-size="13.5" font-weight="600" fill="#141413">slabmon</text>
+        <text x="304" y="449" font-family="Lora,serif" font-size="10.5" fill="#6b6a5f">watch slab growth = leak</text>
+        <g filter="url(#ndrop)"><rect x="520" y="404" width="228" height="56" rx="9" fill="#ffffff" stroke="#d8d4c8"/></g>
+        <circle cx="536" cy="426" r="3.5" fill="#788c5d"/>
+        <text x="546" y="430" font-family="Poppins,sans-serif" font-size="13.5" font-weight="600" fill="#141413">kmemleak / syzkaller</text>
+        <text x="536" y="449" font-family="Lora,serif" font-size="10.5" fill="#6b6a5f">auto-scan the whole class</text>
+
+        <!-- Report node (focus, ink) -->
+        <g filter="url(#ndrop)"><rect x="884" y="196" width="264" height="168" rx="12" fill="#ffffff" stroke="#141413" stroke-width="1.5"/></g>
+        <rect x="884" y="196" width="264" height="40" rx="12" fill="#e7e4d9"/><rect x="884" y="216" width="264" height="20" fill="#e7e4d9"/>
+        <text x="908" y="222" font-family="Poppins,sans-serif" font-size="13" font-weight="700" fill="#141413">bin/ksec report</text>
+        <text x="908" y="262" font-family="Poppins,sans-serif" font-size="12" font-weight="600" fill="#141413">out/report.md · report.html</text>
+        <text x="908" y="286" font-family="Lora,serif" font-size="11.5" fill="#6b6a5f">L1 facts, L2 hints and L3</text>
+        <text x="908" y="303" font-family="Lora,serif" font-size="11.5" fill="#6b6a5f">measurements — kept separate,</text>
+        <text x="908" y="320" font-family="Lora,serif" font-size="11.5" fill="#6b6a5f">never conflated.</text>
+        <text x="908" y="346" font-family="'JetBrains Mono',monospace" font-size="10.5" fill="#6b6a5f">skipped = not run, not "clean"</text>
+
+        <!-- Converging arrows to report -->
+        <path d="M772,106 H828 Q836,106 836,114 V264 Q836,272 844,272 H882" fill="none" stroke="#c2613f" stroke-width="1.8" marker-end="url(#arrO)"/>
+        <path d="M772,280 H882" fill="none" stroke="#c2613f" stroke-width="1.8" marker-end="url(#arrO)"/>
+        <path d="M772,432 H828 Q836,432 836,424 V290 Q836,282 844,282 H882" fill="none" stroke="#c2613f" stroke-width="1.8" marker-end="url(#arrO)"/>
+
+        <!-- Legend -->
+        <circle cx="900" cy="404" r="4" fill="#6a9bcc"/><text x="912" y="408" font-family="Lora,serif" font-size="11" fill="#6b6a5f">deterministic</text>
+        <circle cx="1004" cy="404" r="4" fill="#d97757"/><text x="1016" y="408" font-family="Lora,serif" font-size="11" fill="#6b6a5f">LLM assist</text>
+        <circle cx="900" cy="426" r="4" fill="#788c5d"/><text x="912" y="430" font-family="Lora,serif" font-size="11" fill="#6b6a5f">dynamic</text>
+        <rect x="1000" y="422" width="8" height="8" rx="2" fill="#141413"/><text x="1016" y="430" font-family="Lora,serif" font-size="11" fill="#6b6a5f">output</text>
+      </svg>
+      <figcaption style="font-family:var(--font-body); font-size:14px; color:var(--anth-text-secondary); margin-top:var(--space-3); text-align:center;">
+        <span class="lang-en">The three detection layers converge into one report via <code>bin/ksec</code>. Deterministic facts, LLM hints and device measurements stay clearly separated.</span>
+        <span class="lang-zh">三层检测经 <code>bin/ksec</code> 汇成一份报告。确定性事实、LLM 提示、设备实测，三者始终分开呈现。</span>
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- Quick start -->
+<section class="anth-section" id="quickstart">
+  <div class="anth-container anth-container--wide">
+    <div style="max-width:720px; margin:0 auto var(--space-8); text-align:center;">
+      <span class="anth-badge"><span class="lang-en">Quick start</span><span class="lang-zh">快速上手</span></span>
+      <h2 style="margin-top:var(--space-3);">
+        <span class="lang-en">Clone, install, scan.</span>
+        <span class="lang-zh">克隆，装依赖，开扫。</span>
+      </h2>
+    </div>
+    <div class="quickstart">
+      <div>
+        <h3 style="font-family:var(--font-heading); font-size:23px; font-weight:600; margin:0 0 var(--space-3);">
+          <span class="lang-en">Four commands to a report</span>
+          <span class="lang-zh">四条命令出报告</span>
+        </h3>
+        <p style="font-family:var(--font-body); font-size:16px; line-height:1.65; color:var(--anth-text); margin:0 0 var(--space-4);">
+          <span class="lang-en"><code>install-deps.sh</code> detects your package manager and installs coccinelle, the cross-compiler and the pip tools. Then point <code>ksec</code> at your kernel source and read the report.</span>
+          <span class="lang-zh"><code>install-deps.sh</code> 认出你的包管理器，装 coccinelle、交叉编译器和 pip 工具。然后把 <code>ksec</code> 指向你的内核源码，读报告。</span>
+        </p>
+        <a class="anth-link" href="usage.html"><span class="lang-en">Full usage guide</span><span class="lang-zh">完整使用指南</span></a>
+      </div>
+      <pre><span class="com"># 1) clone</span>
+$ <span class="cmd">git</span> clone <span class="str">…/linux-kernel-security-oss</span>
+$ <span class="cmd">cd</span> linux-kernel-security-oss
+
+<span class="com"># 2) one-command dependency install</span>
+$ <span class="cmd">bash</span> scripts/install-deps.sh
+
+<span class="com"># 3) pull the third-party tools</span>
+$ <span class="cmd">bash</span> scripts/clone-tools.sh
+
+<span class="com"># 4) scan your kernel, read the report</span>
+$ <span class="cmd">export</span> KERNEL=<span class="str">/path/to/your/kernel</span>
+$ <span class="cmd">bin/ksec</span> scan --kernel <span class="str">"$KERNEL"</span>
+$ <span class="cmd">bin/ksec</span> report --html</pre>
+    </div>
+  </div>
+</section>
+
+<!-- Go deeper -->
+<section class="anth-section anth-section--subtle">
+  <div class="anth-container anth-container--wide">
+    <div style="max-width:720px; margin:0 auto var(--space-8); text-align:center;">
+      <span class="anth-badge"><span class="lang-en">Go deeper</span><span class="lang-zh">深入</span></span>
+      <h2 style="margin-top:var(--space-3);">
+        <span class="lang-en">Every function, and the design behind it.</span>
+        <span class="lang-zh">全部功能，以及背后的设计。</span>
+      </h2>
+    </div>
+    <div class="deep-row">
+      <a class="deep-card" href="usage.html">
+        <span class="cat-card__num" style="color:var(--anth-orange);">USAGE</span>
+        <h3 class="cat-card__name" style="margin:0;"><span class="lang-en">Full usage guide</span><span class="lang-zh">完整使用指南</span></h3>
+        <p class="cat-card__desc" style="margin:var(--space-2) 0 var(--space-3);"><span class="lang-en">install-deps flags, ksec scan / report / audit / dynamic, the harness, and a per-category walkthrough.</span><span class="lang-zh">install-deps 参数、ksec scan / report / audit / dynamic、harness，以及每个类别的走查。</span></p>
+        <span class="anth-link"><span class="lang-en">Open usage</span><span class="lang-zh">打开使用页</span></span>
+      </a>
+      <a class="deep-card" href="architecture.html">
+        <span class="cat-card__num" style="color:var(--anth-blue);">ARCHITECTURE</span>
+        <h3 class="cat-card__name" style="margin:0;"><span class="lang-en">Design &amp; architecture</span><span class="lang-zh">设计与架构</span></h3>
+        <p class="cat-card__desc" style="margin:var(--space-2) 0 var(--space-3);"><span class="lang-en">The three-layer model, how ksec skips missing tools, repo layout, and where LLM fits — honestly.</span><span class="lang-zh">三层模型、ksec 如何优雅跳过缺失工具、仓库布局，以及 LLM 的诚实定位。</span></p>
+        <span class="anth-link"><span class="lang-en">Open architecture</span><span class="lang-zh">打开架构页</span></span>
+      </a>
+      <a class="deep-card" href="https://github.com/TbusOS/linux-kernel-security-oss" target="_blank" rel="noopener">
+        <span class="cat-card__num" style="color:var(--anth-green);">SOURCE</span>
+        <h3 class="cat-card__name" style="margin:0;"><span class="lang-en">Read the source</span><span class="lang-zh">看源码</span></h3>
+        <p class="cat-card__desc" style="margin:var(--space-2) 0 var(--space-3);"><span class="lang-en">docs/00–08 method notes, bin/ksec, harness/, scripts/. MIT licensed.</span><span class="lang-zh">docs/00–08 方法笔记、bin/ksec、harness/、scripts/。MIT 许可。</span></p>
+        <span class="anth-link"><span class="lang-en">Open on GitHub</span><span class="lang-zh">去 GitHub</span></span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="anth-footer">
+  <div class="anth-footer-grid">
+    <div class="anth-footer-group"><h5><span class="lang-en">This repo</span><span class="lang-zh">本仓库</span></h5><a href="index.html"><span class="lang-en">Overview</span><span class="lang-zh">总览</span></a><a href="usage.html"><span class="lang-en">Usage</span><span class="lang-zh">使用</span></a><a href="architecture.html"><span class="lang-en">Architecture</span><span class="lang-zh">架构</span></a></div>
+    <div class="anth-footer-group"><h5><span class="lang-en">Method docs</span><span class="lang-zh">方法文档</span></h5><a href="00-overview.md">00 · overview</a><a href="01-known-cve-detection.md">01 · CVE</a><a href="07-worked-example.md">07 · example</a></div>
+    <div class="anth-footer-group"><h5><span class="lang-en">Layers</span><span class="lang-zh">分层</span></h5><a href="08-report-pipeline.md"><span class="lang-en">Report pipeline</span><span class="lang-zh">报告流水线</span></a><a href="06-binary-re.md"><span class="lang-en">Binary RE</span><span class="lang-zh">二进制逆向</span></a><a href="04-impact-rating.md"><span class="lang-en">Impact rating</span><span class="lang-zh">影响评级</span></a></div>
+    <div class="anth-footer-group"><h5><span class="lang-en">Source</span><span class="lang-zh">源码</span></h5><a href="https://github.com/TbusOS/linux-kernel-security-oss" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/TbusOS/linux-kernel-security-oss/blob/master/LICENSE" target="_blank" rel="noopener">License</a><a href="https://github.com/TbusOS/linux-kernel-security-oss/blob/master/README.md" target="_blank" rel="noopener">README</a></div>
+  </div>
+  <div class="anth-footer-legal">
+    <span>linux-kernel-security-oss · <span class="lang-en">open source, MIT licensed</span><span class="lang-zh">开源，MIT 许可证</span></span>
+    <span><span class="lang-en">All examples are fictional (/dev/foo). Test only what you own or are authorized to.</span><span class="lang-zh">示例均为虚构（/dev/foo)。只测你拥有或获授权的目标。</span></span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var html = document.documentElement;
+  var queryLang = new URLSearchParams(location.search).get('lang');
+  var saved;
+  if (queryLang === 'zh' || queryLang === 'en') { saved = queryLang; }
+  else {
+    try { saved = localStorage.getItem('lksec-lang'); } catch (e) {}
+    if (!saved) { saved = (navigator.language || 'en').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en'; }
+  }
+  function apply(lang) {
+    html.setAttribute('data-lang', lang);
+    html.setAttribute('lang', lang === 'zh' ? 'zh-CN' : 'en');
+    try { localStorage.setItem('lksec-lang', lang); } catch (e) {}
+    document.querySelectorAll('.lang-toggle').forEach(function (btn) { btn.textContent = lang === 'zh' ? 'EN / 中' : '中 / EN'; });
+  }
+  apply(saved);
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.lang-toggle').forEach(function (btn) {
+      btn.addEventListener('click', function () { apply(html.getAttribute('data-lang') === 'zh' ? 'en' : 'zh'); });
+    });
+  });
+})();
+</script>
+
+<!-- design-review:self-diff v1
+Skill: anthropic
+Page-type: docs-home
+Created: 2026-07-06
+
+Decisions (6):
+1. [plain-language-hero] chose a plain-language hero ("Test your kernel before someone else does.") + context badge over a buzzword tagline. Because this page is read by kernel engineers deciding whether to adopt the toolkit, not prospects being sold to; the subtitle states exactly what it does (six categories, three layers, one install command).
+2. [six-category-grid] chose a 3x2 card grid, one card per category, with a colored kicker that encodes the semantic hue (blue=deterministic, orange=LLM/focus, green=domain, gray=reference ④). Because the whole design purpose is "these are six DIFFERENT things" — a scannable grid makes that structure graspable in ~30s where a list would hide it.
+3. [three-layer-hero-diagram] chose a hand-crafted SVG architecture diagram (3 tinted lanes L1/L2/L3 converging into one report node) over a prose description. Because the core mental model is layered + convergent; hues carry the L1/L2/L3 semantics, the ink report node is the single focus, and arrows show convergence. Follows diagram-craft: 2-line node cards, edge-anchored rounded connectors, container tints not color bands, legend.
+4. [stat-callout-row] chose a 4-up stat row (6 / 10 / 3 / 1) over a prose sentence of numbers, per the density contract (numbers get stat callouts, never a prose list).
+5. [two-column-quickstart] chose prose-left + dark terminal-right quickstart showing the real four commands (install-deps → clone-tools → ksec scan → report). The dark panel is the only dark surface, giving a rhythm break.
+6. [desensitized-throughout] every example is fictional (/dev/foo, $KERNEL); zero real product/vendor/chip names anywhere, matching the repo's public-facing desensitization rule. The footer restates it.
+
+Known trade-offs:
+- The three-layer diagram is wide (1180 viewBox) and lives in a --wide container; on narrow viewports it scales down but remains the densest element. Accepted: it is the single most important mental model on the page and earns the width (diagram-craft §8.1 breakout).
+- Category cards use only colored kickers (not full colored cards) for brand restraint; the color-coding is subtle and a colorblind reader leans on the number + label instead. Accepted per anthropic restraint + the labels carry the meaning.
+- Bilingual EN/zh doubles text length in source; kept because docs-home MUST stay bilingual (§G) and the audience spans both.
+/design-review:self-diff -->
+
+</body>
+</html>

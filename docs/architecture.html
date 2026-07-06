@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="zh" data-lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture — linux-kernel-security-oss</title>
+<meta name="description" content="Design & architecture: the three-layer model, how ksec skips missing tools instead of failing, repo layout, and the honest positioning of LLM. 设计与架构。">
+<meta property="og:title" content="Architecture — linux-kernel-security-oss">
+<meta property="og:description" content="The three-layer model, ksec's skip-don't-fail orchestration, repo layout, and where LLM honestly fits. 设计与架构。">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="assets/fonts.css">
+<link rel="stylesheet" href="assets/anthropic.css">
+<style>
+  html[data-lang="en"] .lang-zh { display: none !important; }
+  html[data-lang="zh"] .lang-en { display: none !important; }
+  html[data-lang="zh"] body, html[data-lang="zh"] p, html[data-lang="zh"] li, html[data-lang="zh"] td, html[data-lang="zh"] th {
+    font-family: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", sans-serif;
+  }
+  html[data-lang="zh"] h1, html[data-lang="zh"] h2, html[data-lang="zh"] h3, html[data-lang="zh"] .anth-badge {
+    font-family: "Noto Sans SC", "PingFang SC", sans-serif;
+  }
+  .lang-toggle {
+    background: transparent; border: 1px solid var(--anth-light-gray); color: var(--anth-text);
+    font-family: var(--font-heading); font-size: 13px; font-weight: 500; padding: 6px 12px;
+    border-radius: var(--radius-pill); cursor: pointer; letter-spacing: 0.05em;
+  }
+  .lang-toggle:hover { background: var(--anth-light-gray); }
+  .tree {
+    background: #141413; color: #e8e6dc; padding: var(--space-6); border-radius: 12px;
+    font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.75; overflow-x: auto; margin: 0;
+  }
+  .tree .d { color: #6a9bcc; } .tree .f { color: #a9c890; } .tree .c { color: #8f8d80; font-style: italic; }
+  .princ-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-5); }
+  .princ-card {
+    background: #ffffff; border: 1px solid var(--anth-light-gray); border-radius: var(--radius-md);
+    padding: var(--space-6); border-left: 4px solid var(--anth-orange);
+  }
+  .princ-card h3 { font-family: var(--font-heading); font-size: 19px; font-weight: 600; margin: 0 0 var(--space-2); }
+  .princ-card p { font-family: var(--font-body); font-size: 15px; line-height: 1.65; color: var(--anth-text); margin: 0; }
+  @media (max-width: 768px) { .princ-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<nav class="anth-nav"><div class="anth-nav-inner">
+  <a href="index.html" style="font-family:var(--font-heading); font-weight:600; font-size:17px; text-decoration:none; color:var(--anth-text);">linux-kernel-security-oss</a>
+  <div>
+    <a href="usage.html"><span class="lang-en">Usage</span><span class="lang-zh">使用</span></a>
+    <a href="architecture.html" style="color:var(--anth-orange);"><span class="lang-en">Architecture</span><span class="lang-zh">架构</span></a>
+    <a href="index.html#categories"><span class="lang-en">Features</span><span class="lang-zh">功能</span></a>
+  </div>
+  <div style="display:flex; gap:var(--space-3); align-items:center;">
+    <button type="button" class="lang-toggle" aria-label="Switch language">EN / 中</button>
+    <a class="anth-button" href="https://github.com/TbusOS/linux-kernel-security-oss" target="_blank" rel="noopener">GitHub</a>
+  </div>
+</div></nav>
+
+<!-- Hero -->
+<section class="anth-hero">
+  <div class="anth-container anth-container--wide" style="text-align:center;">
+    <span class="anth-badge"><span class="lang-en">Design &amp; architecture</span><span class="lang-zh">设计与架构</span></span>
+    <h1 style="margin-top:var(--space-4); font-size:54px; line-height:1.12; max-width:840px; margin-left:auto; margin-right:auto;">
+      <span class="lang-en">Deterministic first.<br>LLM where it helps.</span>
+      <span class="lang-zh">确定性优先，<br>LLM 只在帮得上的地方。</span>
+    </h1>
+    <p style="font-size:18px; color:var(--anth-text-secondary); margin:var(--space-5) auto var(--space-6); line-height:1.65; font-family:var(--font-body); max-width:700px;">
+      <span class="lang-en">The whole design follows one belief: known-CVE detection is a job for deterministic tools, and the LLM earns its place only in the assist role. Here is how that belief shapes the layers, the orchestrator, and the repo.</span>
+      <span class="lang-zh">整个设计遵循一个判断：已知 CVE 检测是确定性工具的活，LLM 只在辅助角色里才配上场。下面是这个判断怎么塑造了分层、编排器和仓库结构。</span>
+    </p>
+  </div>
+</section>
+
+<!-- Principles -->
+<section class="anth-section anth-section--subtle">
+  <div class="anth-container">
+    <div style="max-width:680px; margin:0 auto var(--space-7); text-align:center;">
+      <span class="anth-badge"><span class="lang-en">Four principles</span><span class="lang-zh">四条原则</span></span>
+      <h2 style="margin-top:var(--space-3);"><span class="lang-en">What the design commits to.</span><span class="lang-zh">设计上认死的四件事。</span></h2>
+    </div>
+    <div class="princ-grid">
+      <div class="princ-card">
+        <h3><span class="lang-en">1 · Deterministic before LLM</span><span class="lang-zh">1 · 确定性先于 LLM</span></h3>
+        <p><span class="lang-en">cvehound's coccinelle rules and git-commit comparison are the core of ① — reproducible, no hallucination. The LLM post-processes, it doesn't lead.</span><span class="lang-zh">cvehound 的 coccinelle 规则和 git commit 比对是 ① 的核心——可复现、不幻觉。LLM 做后处理，不当主角。</span></p>
+      </div>
+      <div class="princ-card">
+        <h3><span class="lang-en">2 · Skip, don't fail</span><span class="lang-zh">2 · 缺了就跳，不报错</span></h3>
+        <p><span class="lang-en">A missing scanner is marked <code>skipped</code> with a reason, never a crash. A partial report is useful; a stack trace is not. "skipped" is honestly labelled as "not run", not "clean".</span><span class="lang-zh">缺个扫描器就标 <code>skipped</code> 带原因，绝不崩。半份报告有用，堆栈没用。"skipped" 老实标成"没跑"，不是"没问题"。</span></p>
+      </div>
+      <div class="princ-card">
+        <h3><span class="lang-en">3 · Layers stay separated</span><span class="lang-zh">3 · 三层始终分开</span></h3>
+        <p><span class="lang-en">L1 facts, L2 hints and L3 measurements are shown separately in the report. An LLM "suspected" finding is never presented as an L1 "confirmed" one.</span><span class="lang-zh">L1 事实、L2 提示、L3 实测在报告里分开呈现。LLM 的"疑似"绝不冒充 L1 的"确认"。</span></p>
+      </div>
+      <div class="princ-card">
+        <h3><span class="lang-en">4 · Reproducible, not vendored</span><span class="lang-zh">4 · 可复现，不塞字节</span></h3>
+        <p><span class="lang-en">The 10 third-party tools are cloned by a script, never committed. The repo tracks method + orchestration; <code>clone-tools.sh</code> rebuilds the tree anywhere.</span><span class="lang-zh">10 个第三方工具靠脚本克隆，绝不提交进库。仓库只版本化方法 + 编排；<code>clone-tools.sh</code> 在任何机器重建工具树。</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ksec orchestration flowchart -->
+<section class="anth-section">
+  <div class="anth-container anth-container--wide">
+    <div style="max-width:700px; margin:0 auto var(--space-7); text-align:center;">
+      <span class="anth-badge"><span class="lang-en">Inside ksec</span><span class="lang-zh">ksec 内部</span></span>
+      <h2 style="margin-top:var(--space-3);"><span class="lang-en">How one scanner runs.</span><span class="lang-zh">一个扫描器怎么跑。</span></h2>
+      <p style="color:var(--anth-text-secondary); font-size:17px; margin-top:var(--space-3); font-family:var(--font-body);">
+        <span class="lang-en">Every scanner follows the same lifecycle: is the tool present? If not, record <code>skipped</code>. If yes, run it, normalize its output to JSON, and let <code>report</code> merge it.</span>
+        <span class="lang-zh">每个扫描器都走同一条生命周期：工具在不在？不在就记 <code>skipped</code>。在就跑，把输出规整成 JSON，交给 <code>report</code> 合并。</span>
+      </p>
+    </div>
+
+    <figure style="margin:0;">
+      <svg viewBox="0 0 1120 250" role="img" width="100%" style="height:auto; border:1px solid var(--anth-light-gray); border-radius:16px; background:#ffffff;"
+           aria-label="ksec scanner lifecycle: for each scanner, check whether the tool binary is present; if absent, record a skipped result with a reason; if present, run it, normalize stdout to a JSON result, and ksec report merges all JSON results into one report.">
+        <defs>
+          <pattern id="dots3" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1" fill="#141413" opacity="0.05"/></pattern>
+          <marker id="arrA" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.5 L7.5,4 L0,7.5 Z" fill="#c2613f"/></marker>
+          <marker id="arrG" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0.5 L7.5,4 L0,7.5 Z" fill="#a8a496"/></marker>
+          <filter id="nd3" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.06"/></filter>
+        </defs>
+        <rect x="0" y="0" width="1120" height="250" rx="16" fill="#faf9f5"/><rect x="0" y="0" width="1120" height="250" rx="16" fill="url(#dots3)"/>
+
+        <!-- start -->
+        <g filter="url(#nd3)"><rect x="32" y="98" width="150" height="56" rx="9" fill="#ffffff" stroke="#d8d4c8"/></g>
+        <circle cx="49" cy="119" r="9" fill="#d97757"/><text x="49" y="123" text-anchor="middle" font-family="Poppins,sans-serif" font-size="11" font-weight="700" fill="#ffffff">1</text>
+        <text x="66" y="120" font-family="Poppins,sans-serif" font-size="13" font-weight="600" fill="#141413">scanner</text>
+        <text x="66" y="139" font-family="Lora,serif" font-size="10.5" fill="#6b6a5f">cvehound / …</text>
+
+        <!-- decision diamond -->
+        <path d="M330,126 L392,84 L454,126 L392,168 Z" fill="#f4d9cd" stroke="#d97757" stroke-width="1.5"/>
+        <text x="392" y="122" text-anchor="middle" font-family="Poppins,sans-serif" font-size="12" font-weight="600" fill="#141413">have(tool)</text>
+        <text x="392" y="139" text-anchor="middle" font-family="Poppins,sans-serif" font-size="12" font-weight="600" fill="#141413">?</text>
+
+        <!-- skip path (no) -->
+        <g filter="url(#nd3)"><rect x="560" y="40" width="196" height="56" rx="9" fill="#ffffff" stroke="#d8d4c8"/></g>
+        <circle cx="576" cy="61" r="3.5" fill="#c9913f"/><text x="586" y="65" font-family="Poppins,sans-serif" font-size="13" font-weight="600" fill="#141413">skipped</text>
+        <text x="576" y="82" font-family="Lora,serif" font-size="10.5" fill="#6b6a5f">reason recorded, no crash</text>
+
+        <!-- run path (yes) -->
+        <g filter="url(#nd3)"><rect x="560" y="156" width="196" height="56" rx="9" fill="#fbeee7" stroke="#e0a385" stroke-width="1.4"/></g>
+        <circle cx="576" cy="177" r="3.5" fill="#d97757"/><text x="586" y="181" font-family="Poppins,sans-serif" font-size="13" font-weight="600" fill="#141413">run + normalize</text>
+        <text x="576" y="198" font-family="Lora,serif" font-size="10.5" fill="#6b6a5f">stdout → JSON result</text>
+
+        <!-- report node -->
+        <g filter="url(#nd3)"><rect x="838" y="98" width="248" height="56" rx="9" fill="#ffffff" stroke="#141413" stroke-width="1.5"/></g>
+        <circle cx="855" cy="119" r="3.5" fill="#141413"/><text x="865" y="120" font-family="Poppins,sans-serif" font-size="13" font-weight="600" fill="#141413">ksec report</text>
+        <text x="855" y="139" font-family="Lora,serif" font-size="10.5" fill="#6b6a5f">merge every JSON → md / html</text>
+
+        <!-- arrows -->
+        <path d="M182,126 H326" fill="none" stroke="#c2613f" stroke-width="1.8" marker-end="url(#arrA)"/>
+        <path d="M392,84 V68 Q392,60 400,60 H556" fill="none" stroke="#a8a496" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrG)"/>
+        <text x="470" y="54" font-family="Poppins,sans-serif" font-size="11" font-weight="600" fill="#8a5a2a">no</text>
+        <path d="M392,168 V184 Q392,192 400,192 H556" fill="none" stroke="#c2613f" stroke-width="1.8" marker-end="url(#arrA)"/>
+        <text x="470" y="210" font-family="Poppins,sans-serif" font-size="11" font-weight="600" fill="#c2613f">yes</text>
+        <path d="M756,68 H800 Q808,68 808,76 V119 H836" fill="none" stroke="#a8a496" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrG)"/>
+        <path d="M756,184 H800 Q808,184 808,176 V133 H836" fill="none" stroke="#c2613f" stroke-width="1.8" marker-end="url(#arrA)"/>
+
+        <!-- legend -->
+        <circle cx="360" cy="222" r="4" fill="#d97757"/><text x="372" y="226" font-family="Lora,serif" font-size="11" fill="#6b6a5f">main path</text>
+        <rect x="470" y="218" width="14" height="0" /><line x1="468" y1="222" x2="486" y2="222" stroke="#a8a496" stroke-width="1.3" stroke-dasharray="4 3"/><text x="494" y="226" font-family="Lora,serif" font-size="11" fill="#6b6a5f">skipped path</text>
+      </svg>
+      <figcaption style="font-family:var(--font-body); font-size:14px; color:var(--anth-text-secondary); margin-top:var(--space-3); text-align:center;">
+        <span class="lang-en">The lifecycle is identical for every scanner — presence check, run-or-skip, normalize to JSON, merge. A missing tool never stops the run.</span>
+        <span class="lang-zh">每个扫描器生命周期一样——查在不在、跑或跳、规整成 JSON、合并。缺工具从不打断整轮。</span>
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- Repo layout -->
+<section class="anth-section anth-section--subtle">
+  <div class="anth-container">
+    <span class="anth-badge"><span class="lang-en">Repo layout</span><span class="lang-zh">仓库布局</span></span>
+    <h2 style="margin-top:var(--space-3);"><span class="lang-en">Where everything lives.</span><span class="lang-zh">东西都在哪。</span></h2>
+    <pre class="tree" style="margin-top:var(--space-5);"><span class="d">linux-kernel-security-oss/</span>
+├── <span class="f">README.md</span>            <span class="c"># overview + quickstart</span>
+├── <span class="d">docs/</span>                <span class="c"># method notes 00–08 + this site</span>
+│   ├── <span class="f">00-overview.md</span> … <span class="f">08-report-pipeline.md</span>
+│   └── <span class="f">index / usage / architecture.html</span>
+├── <span class="d">bin/</span>
+│   └── <span class="f">ksec</span>             <span class="c"># L1 orchestrator (pure py3 stdlib)</span>
+├── <span class="d">harness/</span>            <span class="c"># L3 dynamic</span>
+│   ├── <span class="f">ioctl_leak_probe.c</span>
+│   └── <span class="f">slabmon.sh</span>
+├── <span class="d">scripts/</span>
+│   ├── <span class="f">install-deps.sh</span>  <span class="c"># one-command system deps</span>
+│   └── <span class="f">clone-tools.sh</span>   <span class="c"># fetch the 10 tools</span>
+├── <span class="d">repos/</span>              <span class="c"># cloned tools (bytes NOT in git)</span>
+└── <span class="d">.claude/commands/</span>   <span class="c"># /kernel-sec-audit (L2)</span></pre>
+  </div>
+</section>
+
+<!-- LLM honest positioning -->
+<section class="anth-section">
+  <div class="anth-container" style="max-width:760px; text-align:center;">
+    <span class="anth-badge"><span class="lang-en">The honest part</span><span class="lang-zh">诚实的部分</span></span>
+    <h2 style="margin-top:var(--space-3);"><span class="lang-en">What the LLM is not.</span><span class="lang-zh">LLM 不是什么。</span></h2>
+    <blockquote class="anth-quote" style="margin-top:var(--space-5);">
+      <span class="lang-en">Don't expect "let Claude read the whole kernel and find bugs" — false-positive rates are high and the context won't fit. State-of-the-art CVE discovery is always LLM paired with a fuzzer, a static checker, or CodeQL. The LLM's real value here is post-processing, explanation, and spec synthesis.</span>
+      <span class="lang-zh">别指望"让 Claude 读整棵内核源码帮我找洞"——误报高、上下文塞不下。实产 CVE 的做法都是 LLM 配 fuzzer、静态 checker 或 CodeQL。LLM 在这里的真实价值是后处理、解释和规格合成。</span>
+    </blockquote>
+    <p style="font-family:var(--font-body); font-size:16px; color:var(--anth-text-secondary); margin:var(--space-6) auto 0; line-height:1.7; max-width:640px;">
+      <span class="lang-en">And every LLM finding is verified back against source and, where possible, measured on a device. The LLM proposes; the deterministic layers and your own testing dispose.</span>
+      <span class="lang-zh">而且每条 LLM 发现都要回源码验证，能实测就实测。LLM 只负责提出；确定性层和你自己的测试负责定夺。</span>
+    </p>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="anth-footer">
+  <div class="anth-footer-grid">
+    <div class="anth-footer-group"><h5><span class="lang-en">This repo</span><span class="lang-zh">本仓库</span></h5><a href="index.html"><span class="lang-en">Overview</span><span class="lang-zh">总览</span></a><a href="usage.html"><span class="lang-en">Usage</span><span class="lang-zh">使用</span></a><a href="architecture.html"><span class="lang-en">Architecture</span><span class="lang-zh">架构</span></a></div>
+    <div class="anth-footer-group"><h5><span class="lang-en">Method docs</span><span class="lang-zh">方法文档</span></h5><a href="00-overview.md">00 · overview</a><a href="01-known-cve-detection.md">01 · CVE</a><a href="07-worked-example.md">07 · example</a></div>
+    <div class="anth-footer-group"><h5><span class="lang-en">Layers</span><span class="lang-zh">分层</span></h5><a href="08-report-pipeline.md"><span class="lang-en">Report pipeline</span><span class="lang-zh">报告流水线</span></a><a href="06-binary-re.md"><span class="lang-en">Binary RE</span><span class="lang-zh">二进制逆向</span></a><a href="04-impact-rating.md"><span class="lang-en">Impact rating</span><span class="lang-zh">影响评级</span></a></div>
+    <div class="anth-footer-group"><h5><span class="lang-en">Source</span><span class="lang-zh">源码</span></h5><a href="https://github.com/TbusOS/linux-kernel-security-oss" target="_blank" rel="noopener">GitHub</a><a href="https://github.com/TbusOS/linux-kernel-security-oss/blob/master/LICENSE" target="_blank" rel="noopener">License</a><a href="https://github.com/TbusOS/linux-kernel-security-oss/blob/master/README.md" target="_blank" rel="noopener">README</a></div>
+  </div>
+  <div class="anth-footer-legal">
+    <span>linux-kernel-security-oss · <span class="lang-en">open source, MIT licensed</span><span class="lang-zh">开源，MIT 许可证</span></span>
+    <span><span class="lang-en">All examples are fictional (/dev/foo). Test only what you own or are authorized to.</span><span class="lang-zh">示例均为虚构（/dev/foo）。只测你拥有或获授权的目标。</span></span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var html = document.documentElement;
+  var queryLang = new URLSearchParams(location.search).get('lang');
+  var saved;
+  if (queryLang === 'zh' || queryLang === 'en') { saved = queryLang; }
+  else { try { saved = localStorage.getItem('lksec-lang'); } catch (e) {} if (!saved) { saved = (navigator.language || 'en').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en'; } }
+  function apply(lang) {
+    html.setAttribute('data-lang', lang); html.setAttribute('lang', lang === 'zh' ? 'zh-CN' : 'en');
+    try { localStorage.setItem('lksec-lang', lang); } catch (e) {}
+    document.querySelectorAll('.lang-toggle').forEach(function (btn) { btn.textContent = lang === 'zh' ? 'EN / 中' : '中 / EN'; });
+  }
+  apply(saved);
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.lang-toggle').forEach(function (btn) { btn.addEventListener('click', function () { apply(html.getAttribute('data-lang') === 'zh' ? 'en' : 'zh'); }); });
+  });
+})();
+</script>
+
+<!-- design-review:self-diff v1
+Skill: anthropic
+Page-type: feature-deep
+Created: 2026-07-06
+
+Decisions (5):
+1. [principles-before-diagram] led with four principle cards (left-orange-bar) stating the design commitments, then showed the ksec lifecycle diagram that embodies them. Reader gets the "why" before the "how".
+2. [decision-diamond-flowchart] the ksec scanner lifecycle uses a proper decision diamond (have(tool)?) with a gold "skipped" branch (dashed gray path) and an orange "run" branch (solid main path), a numbered start badge, and an ink report node — textbook diagram-craft §6.
+3. [terminal-repo-tree] rendered the repo layout as a dark terminal tree with blue dirs / green files / gray comments, matching the code aesthetic used across the site rather than a plain bulleted list.
+4. [llm-positioning-pullquote] the honest "what the LLM is not" section is an anth-quote pull-quote — the single most important stance of the whole project deserves the page's one italic display moment.
+5. [gray-floor-6b6a5f] all secondary SVG/body text uses #6b6a5f (not #b0aea5 or #8c8a7d) after the index critic flagged below-AA micro-labels — contrast floor applied from the start here.
+
+Known trade-offs:
+- Two SVG hues on the flowchart are orange (main) + gold (skip) + ink (report); blue/green appear only in the tree. Accepted: a flowchart's semantics are pass/fail/output, which map to orange/gold/ink; forcing a fourth hue would be decorative.
+- The principle cards are text-only (no icon). Accepted: the left orange bar + Poppins heading carry enough structure, and adding icons to four abstract principles risks literal-icon cliché.
+- feature-deep kept bilingual though it lengthens the page; §G requires the toggle and the audience spans EN/zh.
+/design-review:self-diff -->
+
+</body>
+</html>
