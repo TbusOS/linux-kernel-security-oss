@@ -58,8 +58,8 @@
 <!-- Hero -->
 <section class="anth-hero">
   <div class="anth-container anth-container--wide" style="text-align:center;">
-    <span class="anth-badge"><span class="lang-en">Design &amp; architecture</span><span class="lang-zh">设计与架构</span></span>
-    <h1 style="margin-top:var(--space-4); font-size:54px; line-height:1.12; max-width:840px; margin-left:auto; margin-right:auto;">
+    <span class="anth-badge" style="background:var(--anth-orange); color:#ffffff; font-weight:600;"><span class="lang-en">Design &amp; architecture</span><span class="lang-zh">设计与架构</span></span>
+    <h1 style="margin-top:var(--space-4); font-size:56px; line-height:1.12; max-width:840px; margin-left:auto; margin-right:auto;">
       <span class="lang-en">Deterministic first.<br>LLM where it helps.</span>
       <span class="lang-zh">确定性优先，<br>LLM 只在帮得上的地方。</span>
     </h1>
@@ -67,11 +67,20 @@
       <span class="lang-en">The whole design follows one belief: known-CVE detection is a job for deterministic tools, and the LLM earns its place only in the assist role. Here is how that belief shapes the layers, the orchestrator, and the repo.</span>
       <span class="lang-zh">整个设计遵循一个判断：已知 CVE 检测是确定性工具的活，LLM 只在辅助角色里才配上场。下面是这个判断怎么塑造了分层、编排器和仓库结构。</span>
     </p>
+    <div style="display:flex; gap:var(--space-3); justify-content:center; flex-wrap:wrap;">
+      <a class="anth-button" href="https://github.com/TbusOS/linux-kernel-security-oss" target="_blank" rel="noopener"><span class="lang-en">Read on GitHub</span><span class="lang-zh">去 GitHub 看源码</span></a>
+      <a class="anth-button anth-button--ghost" href="#principles"><span class="lang-en">The four principles</span><span class="lang-zh">看四条原则</span></a>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:var(--space-5); max-width:680px; margin:var(--space-8) auto 0;">
+      <div class="anth-stat"><div class="anth-stat-number">3</div><div class="anth-stat-label"><span class="lang-en">layers · L1 · L2 · L3</span><span class="lang-zh">检测层 · L1 · L2 · L3</span></div></div>
+      <div class="anth-stat"><div class="anth-stat-number">10</div><div class="anth-stat-label"><span class="lang-en">tools, cloned not vendored</span><span class="lang-zh">工具 · 克隆不入库</span></div></div>
+      <div class="anth-stat"><div class="anth-stat-number">0</div><div class="anth-stat-label"><span class="lang-en">tool bytes in git</span><span class="lang-zh">工具字节进 git</span></div></div>
+    </div>
   </div>
 </section>
 
 <!-- Principles -->
-<section class="anth-section anth-section--subtle">
+<section class="anth-section anth-section--subtle" id="principles">
   <div class="anth-container">
     <div style="max-width:680px; margin:0 auto var(--space-7); text-align:center;">
       <span class="anth-badge"><span class="lang-en">Four principles</span><span class="lang-zh">四条原则</span></span>
@@ -134,7 +143,7 @@
 
         <!-- skip path (no) -->
         <g filter="url(#nd3)"><rect x="560" y="40" width="196" height="56" rx="9" fill="#ffffff" stroke="#d8d4c8"/></g>
-        <circle cx="576" cy="61" r="3.5" fill="#c9913f"/><text x="586" y="65" font-family="Poppins,sans-serif" font-size="13" font-weight="600" fill="#141413">skipped</text>
+        <circle cx="576" cy="61" r="3.5" fill="#a8a496"/><text x="586" y="65" font-family="Poppins,sans-serif" font-size="13" font-weight="600" fill="#141413">skipped</text>
         <text x="576" y="82" font-family="Lora,serif" font-size="10.5" fill="#6b6a5f">reason recorded, no crash</text>
 
         <!-- run path (yes) -->
@@ -150,7 +159,7 @@
         <!-- arrows -->
         <path d="M182,126 H326" fill="none" stroke="#c2613f" stroke-width="1.8" marker-end="url(#arrA)"/>
         <path d="M392,84 V68 Q392,60 400,60 H556" fill="none" stroke="#a8a496" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrG)"/>
-        <text x="470" y="54" font-family="Poppins,sans-serif" font-size="11" font-weight="600" fill="#8a5a2a">no</text>
+        <text x="470" y="54" font-family="Poppins,sans-serif" font-size="11" font-weight="600" fill="#6b6a5f">no</text>
         <path d="M392,168 V184 Q392,192 400,192 H556" fill="none" stroke="#c2613f" stroke-width="1.8" marker-end="url(#arrA)"/>
         <text x="470" y="210" font-family="Poppins,sans-serif" font-size="11" font-weight="600" fill="#c2613f">yes</text>
         <path d="M756,68 H800 Q808,68 808,76 V119 H836" fill="none" stroke="#a8a496" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrG)"/>

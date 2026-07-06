@@ -59,8 +59,8 @@
 <!-- Hero -->
 <section class="anth-hero">
   <div class="anth-container anth-container--wide" style="text-align:center;">
-    <span class="anth-badge"><span class="lang-en">Usage guide</span><span class="lang-zh">使用指南</span></span>
-    <h1 style="margin-top:var(--space-4); font-size:52px; line-height:1.12; max-width:820px; margin-left:auto; margin-right:auto;">
+    <span class="anth-badge" style="background:var(--anth-orange); color:#ffffff; font-weight:600;"><span class="lang-en">Usage guide</span><span class="lang-zh">使用指南</span></span>
+    <h1 style="margin-top:var(--space-4); font-size:56px; line-height:1.12; max-width:820px; margin-left:auto; margin-right:auto;">
       <span class="lang-en">Every command,<br>from install to report.</span>
       <span class="lang-zh">从装依赖到出报告，<br>每条命令都在这。</span>
     </h1>
@@ -131,6 +131,11 @@
         <span class="lang-zh">装一次，之后每棵内核跑一遍。<code>ksec report</code> 合并静态、LLM、动态三层结果。</span>
       </figcaption>
     </figure>
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:var(--space-5); max-width:760px; margin:var(--space-8) auto 0;">
+      <div class="anth-stat"><div class="anth-stat-number">6</div><div class="anth-stat-label"><span class="lang-en">categories</span><span class="lang-zh">工具类别</span></div></div>
+      <div class="anth-stat"><div class="anth-stat-number">3</div><div class="anth-stat-label"><span class="lang-en">layers · L1 · L2 · L3</span><span class="lang-zh">检测层 · L1 · L2 · L3</span></div></div>
+      <div class="anth-stat"><div class="anth-stat-number">10</div><div class="anth-stat-label"><span class="lang-en">OSS tools wired in</span><span class="lang-zh">编排好的开源工具</span></div></div>
+    </div>
   </div>
 </section>
 
@@ -221,6 +226,11 @@ $ <span class="cmd">export</span> KERNEL=<span class="str">/path/to/your/kernel<
 $ <span class="cmd">bin/ksec</span> scan --kernel <span class="str">"$KERNEL"</span> --config <span class="str">"$KERNEL/.config"</span>
 $ <span class="cmd">bin/ksec</span> report --html
 <span class="com"># → out/report.md 和 out/report.html</span></div>
+    <blockquote class="anth-quote" style="margin-top:var(--space-7);">
+      <span class="lang-en">A skipped scanner means <em>not run</em> — never "clean". Read the reason, install what's missing, run again.</span>
+      <span class="lang-zh">扫描器被跳过意思是<em>没跑</em>——绝不是"没问题"。读原因、补上缺的、再跑一遍。</span>
+      <cite class="anth-quote-cite">ksec report</cite>
+    </blockquote>
   </div>
 </section>
 
