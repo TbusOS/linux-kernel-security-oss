@@ -1,0 +1,314 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+ksec — Linux 内核安全检查编排器(确定性静态层 · Layer 1)。
+
+设计目标:任何人 git clone 本仓库 → `ksec setup` → `ksec scan` → `ksec report`,
+无需 Claude 就能对一棵内核源码/配置跑一批确定性静态检查并出一份报告。
+
+只用 Python3 标准库;各扫描器是外部 CLI,缺了就优雅跳过(报告里标 skipped)。
+LLM 审计(Layer 2)见 .claude/commands/kernel-sec-audit.md;
+动态/逆向(Layer 3)见 docs/08-report-pipeline.md。
+"""
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+
+# 锁公共 PATH,不吃用户私人目录
+os.environ["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:" + os.environ.get("PATH", "")
+os.environ["PYTHONNOUSERSITE"] = "1"
+
+ROOT = Path(__file__).resolve().parent.parent          # linux-kernel-security/
+REPOS = ROOT / "repos"
+RULES = ROOT / "rules"
+OUT = ROOT / "out"
+RESULTS = OUT / "results"
+
+KHC_REPO = REPOS / "02-config-hardening" / "kernel-hardening-checker"
+
+
+def have(cmd):
+    return shutil.which(cmd) is not None
+
+
+def run(cmd, cwd=None, timeout=1800):
+    try:
+        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+        return p.returncode, p.stdout, p.stderr
+    except subprocess.TimeoutExpired:
+        return 124, "", "timeout"
+    except FileNotFoundError as e:
+        return 127, "", str(e)
+
+
+def save_result(res):
+    RESULTS.mkdir(parents=True, exist_ok=True)
+    (RESULTS / f"{res['tool']}.json").write_text(
+        json.dumps(res, ensure_ascii=False, indent=2), encoding="utf-8")
+    tag = {"ok": "OK  ", "skipped": "SKIP", "error": "ERR "}.get(res["status"], "??? ")
+    n = len(res.get("findings", []))
+    extra = f" · {n} 命中" if res["status"] == "ok" else f" · {res.get('reason','')}"
+    print(f"  [{tag}] {res['tool']}{extra}")
+
+
+# ---------------- scanners ----------------
+
+def scan_cvehound(kernel):
+    tool = "cvehound"
+    if not have("cvehound"):
+        return {"tool": tool, "status": "skipped", "reason": "cvehound 未装(pip install cvehound)"}
+    if not have("spatch"):
+        return {"tool": tool, "status": "skipped", "reason": "coccinelle(spatch)未装,cvehound 跑不了"}
+    rc, out, err = run(["cvehound", "--kernel", str(kernel)])
+    findings = [l.split("Found:", 1)[1].strip() for l in out.splitlines() if "Found:" in l]
+    return {"tool": tool, "status": "ok" if rc in (0, 1) else "error",
+            "kind": "已知CVE(源码模式)", "findings": findings,
+            "reason": err.strip()[:400] if rc not in (0, 1) else "",
+            "raw_tail": out.splitlines()[-20:]}
+
+
+def _find_khc():
+    if have("kernel-hardening-checker"):
+        return ["kernel-hardening-checker"]
+    cand = KHC_REPO / "bin" / "kernel-hardening-checker"
+    if cand.exists():
+        return [sys.executable, str(cand)]
+    return None
+
+
+def scan_hardening(config):
+    tool = "kernel-hardening-checker"
+    if not config:
+        return {"tool": tool, "status": "skipped",
+                "reason": "未给 --config(需完整 .config;defconfig 不行。先 make <defconfig> 生成 .config)"}
+    khc = _find_khc()
+    if not khc:
+        return {"tool": tool, "status": "skipped",
+                "reason": "未装且 repos 里也没有(ksec setup / clone-tools.sh)"}
+    cfg = Path(config)
+    if not cfg.exists():
+        return {"tool": tool, "status": "error", "reason": f"config 不存在: {cfg}"}
+    rc, out, err = run(khc + ["-c", str(cfg)])
+    fails = [l.strip() for l in out.splitlines() if "FAIL:" in l]
+    oks = [l for l in out.splitlines() if "OK:" in l]
+    return {"tool": tool, "status": "ok" if out else "error",
+            "kind": "配置加固(对照 KSPP 等基线)",
+            "findings": fails, "summary": {"FAIL": len(fails), "OK": len(oks)},
+            "reason": err.strip()[:400] if not out else "",
+            "config": str(cfg)}
+
+
+def scan_semgrep(src):
+    tool = "semgrep"
+    ruledir = RULES / "semgrep"
+    if not src:
+        return {"tool": tool, "status": "skipped", "reason": "未给 --src(要扫的源码目录)"}
+    if not have("semgrep"):
+        return {"tool": tool, "status": "skipped", "reason": "semgrep 未装(pip install semgrep)"}
+    if not ruledir.exists() or not any(ruledir.glob("*.y*ml")):
+        return {"tool": tool, "status": "skipped", "reason": f"无自定义规则: {ruledir}"}
+    rc, out, err = run(["semgrep", "--config", str(ruledir), "--json", str(src)])
+    findings = []
+    try:
+        data = json.loads(out or "{}")
+        for r in data.get("results", []):
+            findings.append(f"{r.get('check_id','?')} @ {r.get('path','?')}:{r.get('start',{}).get('line','?')}")
+    except json.JSONDecodeError:
+        return {"tool": tool, "status": "error", "reason": (err or out)[:400]}
+    return {"tool": tool, "status": "ok", "kind": "自定义规则静态扫", "findings": findings}
+
+
+def scan_cve_tool(kernel, enabled):
+    tool = "kernel-cve-tool"
+    if not enabled:
+        return {"tool": tool, "status": "skipped",
+                "reason": "默认关(--with-cve-tool 开)。需内核 git 历史 + fetch linux-stable,重"}
+    if not (Path(kernel) / ".git").exists():
+        return {"tool": tool, "status": "skipped", "reason": "内核无 .git 历史,该工具用不了"}
+    kct = REPOS / "01-known-cve-detection" / "kernel-cve-tool"
+    lkc = REPOS / "01-known-cve-detection" / "linux_kernel_cves"
+    script = kct / "kernel-cve-tool"
+    if not script.exists() or not lkc.exists():
+        return {"tool": tool, "status": "skipped", "reason": "工具或数据集未克隆(clone-tools.sh)"}
+    rc, out, err = run([sys.executable, str(script), "-P", str(lkc)], cwd=str(kernel))
+    return {"tool": tool, "status": "ok" if rc == 0 else "error",
+            "kind": "已知CVE(git commit 比对)", "findings": out.splitlines()[-40:],
+            "reason": err.strip()[:400] if rc != 0 else ""}
+
+
+# ---------------- commands ----------------
+
+def cmd_setup(args):
+    print("== ksec setup ==")
+    print("[1] pip 装确定性扫描器(用户级,无需 sudo):")
+    for pkg in ("cvehound", "kernel-hardening-checker", "semgrep"):
+        rc, out, err = run([sys.executable, "-m", "pip", "install", "--user", pkg])
+        print(f"    pip install {pkg}: {'OK' if rc == 0 else 'FAIL(' + err.strip()[:80] + ')'}")
+    print("[2] 拉工具仓库(clone-tools.sh):")
+    cs = ROOT / "scripts" / "clone-tools.sh"
+    rc, out, err = run(["bash", str(cs)])
+    print("    " + ("OK" if rc == 0 else "见输出"))
+    print("[3] 系统级依赖检查(缺的要你自己装,可能需 sudo;或跑 scripts/install-deps.sh):")
+    for c, hint in (("spatch", "coccinelle(cvehound 依赖): apt install coccinelle"),
+                    ("semgrep", "pip install semgrep"),
+                    ("git", "apt install git"),
+                    ("ghidra", "手动下 Ghidra release(逆向层,可选)")):
+        print(f"    {'✓' if have(c) else '✗'} {c:8} {'' if have(c) else '→ ' + hint}")
+    print("完成。跑: ksec scan --kernel <内核源码> [--config <.config>] [--src <要扫的源码>]")
+
+
+def cmd_scan(args):
+    kernel = Path(args.kernel).resolve()
+    if not kernel.exists():
+        sys.exit(f"内核路径不存在: {kernel}")
+    RESULTS.mkdir(parents=True, exist_ok=True)
+    meta = {"kernel": str(kernel), "config": args.config, "src": args.src,
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+    (OUT / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"== ksec scan == 内核: {kernel}")
+    save_result(scan_cvehound(kernel))
+    save_result(scan_hardening(args.config))
+    save_result(scan_semgrep(args.src))
+    save_result(scan_cve_tool(kernel, args.with_cve_tool))
+    print("扫描完成。出报告: ksec report [--html]")
+
+
+def _load():
+    meta = json.loads((OUT / "meta.json").read_text(encoding="utf-8")) if (OUT / "meta.json").exists() else {}
+    results = []
+    if RESULTS.exists():
+        for f in sorted(RESULTS.glob("*.json")):
+            results.append(json.loads(f.read_text(encoding="utf-8")))
+    return meta, results
+
+
+def cmd_report(args):
+    meta, results = _load()
+    if not results:
+        sys.exit("没有扫描结果。先跑 ksec scan。")
+    lines = ["# 内核安全检查报告", "",
+             f"- 内核: `{meta.get('kernel','?')}`",
+             f"- 时间: {meta.get('time','?')}",
+             f"- 生成: ksec (Layer 1 确定性静态层)", ""]
+    ok = [r for r in results if r["status"] == "ok"]
+    skipped = [r for r in results if r["status"] == "skipped"]
+    total = sum(len(r.get("findings", [])) for r in ok)
+    lines += ["## 概要", "",
+              f"- 跑了 {len(ok)} 个检查,跳过 {len(skipped)} 个",
+              f"- 命中合计: **{total}**", ""]
+    lines += ["| 检查 | 类型 | 状态 | 命中 |", "|---|---|---|---|"]
+    for r in results:
+        n = len(r.get("findings", [])) if r["status"] == "ok" else "—"
+        st = {"ok": "✅", "skipped": "⏭️ 跳过", "error": "❌"}.get(r["status"], r["status"])
+        lines.append(f"| {r['tool']} | {r.get('kind','')} | {st} | {n} |")
+    lines.append("")
+    for r in results:
+        lines.append(f"## {r['tool']} — {r.get('kind','')}")
+        if r["status"] != "ok":
+            lines.append(f"> {r['status'].upper()}: {r.get('reason','')}")
+            lines.append("")
+            continue
+        fs = r.get("findings", [])
+        if not fs:
+            lines.append("无命中。")
+        else:
+            lines.append(f"命中 {len(fs)} 条:")
+            lines.append("")
+            for x in fs[:200]:
+                lines.append(f"- `{x}`")
+            if len(fs) > 200:
+                lines.append(f"- …还有 {len(fs) - 200} 条(见 out/results/{r['tool']}.json)")
+        lines.append("")
+    lines += ["## 说明(Layer 边界)", "",
+              "- 本报告只含 **Layer 1 确定性静态检查**。",
+              "- LLM 审计(c-review/variant-analysis)见 `/kernel-sec-audit`(需 Claude Code)。",
+              "- 动态 fuzz / 二进制逆向见 `docs/08-report-pipeline.md`。",
+              "- 跳过的检查不是'没问题',是没跑(缺依赖/缺参数),按 reason 补齐再跑。"]
+    md = "\n".join(lines)
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "report.md").write_text(md, encoding="utf-8")
+    print(f"报告: {OUT / 'report.md'}")
+    if args.html:
+        html = ("<!doctype html><meta charset=utf-8><title>内核安全检查报告</title>"
+                "<style>body{font-family:system-ui,'Noto Sans CJK SC',sans-serif;max-width:900px;"
+                "margin:2rem auto;padding:0 1rem;line-height:1.6}"
+                "table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.3rem .6rem}"
+                "code{background:#f4f4f4;padding:.1rem .3rem;border-radius:3px}</style>"
+                "<pre style='white-space:pre-wrap'>" +
+                md.replace("&", "&amp;").replace("<", "&lt;") + "</pre>")
+        (OUT / "report.html").write_text(html, encoding="utf-8")
+        print(f"报告: {OUT / 'report.html'}")
+
+
+def cmd_audit(args):
+    print("== Layer 2 · LLM 审计 ==")
+    if have("claude"):
+        print("检测到 claude CLI。在本仓库目录下运行 Claude Code,然后:")
+    else:
+        print("未检测到 claude CLI。在有 Claude Code + API 的机器上,于本仓库目录:")
+    print(f"  /kernel-sec-audit {args.kernel}")
+    print("它会编排 trailofbits 的 c-review / variant-analysis / entry-point-analyzer,")
+    print("产出人读的审计发现,追加到报告。定义见 .claude/commands/kernel-sec-audit.md")
+
+
+def cmd_dynamic(args):
+    HARNESS = ROOT / "harness"
+    if args.dyn == "check":
+        print("== Layer 3 · 动态前置检查 ==")
+        for c, hint in (("adb", "打到 Android 目标机: apt install android-tools-adb"),
+                        ("aarch64-linux-gnu-gcc", "交叉编译探针: apt install gcc-aarch64-linux-gnu"),
+                        ("syz-manager", "syzkaller(自动 fuzz,重): 见 docs/03 + docs/08")):
+            print(f"  {'✓' if have(c) else '✗'} {c:24} {'' if have(c) else '→ ' + hint}")
+        print("  目标机 kmemleak: 在设备上查 /sys/kernel/debug/kmemleak(需内核开 CONFIG_DEBUG_KMEMLEAK)")
+        print(f"  泄漏探针模板: {HARNESS/'ioctl_leak_probe.c'} ; slab 监控: {HARNESS/'slabmon.sh'}")
+        return
+    if args.dyn == "slabmon":
+        RESULTS.mkdir(parents=True, exist_ok=True)
+        outjson = RESULTS / "slabmon.json"
+        cmd = ["bash", str(HARNESS / "slabmon.sh"), "--cmd", args.cmd,
+               "--total", str(args.total), "--step", str(args.step), "--json", str(outjson)]
+        if args.adb:
+            cmd += ["--adb", args.adb]
+        print("== Layer 3 · slab 泄漏监控 ==  (结果并入 ksec report)")
+        rc, out, err = run(cmd, timeout=3600)
+        print(out or err)
+        if rc != 0 and not outjson.exists():
+            print("slabmon 失败(目标机不可达/无 /proc/meminfo?)。见上。")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="ksec", description="Linux 内核安全检查编排器(静态 Layer1 + 动态 Layer3)")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("setup", help="装依赖 + 拉工具").set_defaults(func=cmd_setup)
+    s = sub.add_parser("scan", help="对内核跑静态检查")
+    s.add_argument("--kernel", required=True, help="内核源码目录")
+    s.add_argument("--config", help="完整 .config(给加固检查用)")
+    s.add_argument("--src", help="要用 semgrep 规则扫的源码子目录(如某个驱动)")
+    s.add_argument("--with-cve-tool", action="store_true", help="开 kernel-cve-tool(需 git+fetch,重)")
+    s.set_defaults(func=cmd_scan)
+    r = sub.add_parser("report", help="汇总成报告")
+    r.add_argument("--html", action="store_true", help="同时出 HTML")
+    r.set_defaults(func=cmd_report)
+    a = sub.add_parser("audit", help="Layer 2 LLM 审计的入口提示")
+    a.add_argument("--kernel", default="<内核源码>")
+    a.set_defaults(func=cmd_audit)
+    d = sub.add_parser("dynamic", help="Layer 3 动态检测(slab 泄漏监控 / 前置检查)")
+    dsub = d.add_subparsers(dest="dyn", required=True)
+    dsub.add_parser("check", help="查 adb/交叉编译/syzkaller/kmemleak 前置")
+    dm = dsub.add_parser("slabmon", help="跑 slab 泄漏监控(配泄漏探针)")
+    dm.add_argument("--cmd", required=True, help="每块 workload,调用为 <cmd> <step>(如 ./probe 或 'adb 上的路径')")
+    dm.add_argument("--total", type=int, default=40000)
+    dm.add_argument("--step", type=int, default=2000)
+    dm.add_argument("--adb", help="走 adb -s SERIAL shell 打到设备")
+    d.set_defaults(func=cmd_dynamic)
+    args = ap.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

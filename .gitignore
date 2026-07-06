@@ -1,0 +1,16 @@
+# 第三方工具克隆的字节不进 git —— 靠 scripts/clone-tools.sh 可复现地重建。
+# 只版本化 docs/、README、脚本、bin/、harness/、清单。
+repos/*/*/
+# 但保留各类目录下的占位,方便 clone 后结构完整
+!repos/*/.gitkeep
+
+# ksec 运行产物
+out/
+*.pyc
+__pycache__/
+*.log
+
+# 交叉编译产物
+*.o
+harness/*.bin
+harness/probe
